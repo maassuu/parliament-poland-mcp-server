@@ -118,6 +118,8 @@ To run the server in a development environment:
 
 Piotr Kolawa ([@pkolawa](https://github.com/pkolawa)) / ([Linkedin](https://linkedin.com/in/pkolawa))
 
+Fork maintained by Małgorzata Gendłek ([@maassuu](https://github.com/maassuu)).
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

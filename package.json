@@ -29,6 +29,12 @@
     "name": "Piotr Kolawa",
     "email": "p.kolawa@gmail.com"
   },
+  "contributors": [
+    {
+      "name": "Małgorzata Gendłek",
+      "url": "https://github.com/maassuu"
+    }
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=18"
