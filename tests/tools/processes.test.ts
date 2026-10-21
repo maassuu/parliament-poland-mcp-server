@@ -1,50 +1,49 @@
 import { jest } from "@jest/globals";
 import { makeSejmRequest } from "../../src/utils/api.js";
+import { expectFailure, type MockFn, notFoundResult, okResult, textOf } from "../helpers.js";
 import { getProcessesTool } from "../../src/tools/processes.js";
-
-type MakeSejmRequestFn = (
-  endpoint: string,
-  params?: Record<string, unknown>
-) => Promise<unknown>;
 
 jest.mock("../../src/utils/api.js", () => ({
   makeSejmRequest: jest.fn(),
 }));
 
-const makeSejmRequestMock =
-  makeSejmRequest as jest.MockedFunction<MakeSejmRequestFn>;
+const request = makeSejmRequest as jest.MockedFunction<MockFn>;
 
 beforeEach(() => {
-  makeSejmRequestMock.mockReset();
+  request.mockReset();
 });
 
 describe("getProcessesTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: [{ number: 77 }] });
+  it("passes filters and paging to the API", async () => {
+    request.mockResolvedValue(okResult([{ number: "1" }]));
 
-    const result = await getProcessesTool.handler({ term: 10, offset: 1, limit: 2 });
-
-    expect(makeSejmRequestMock).toHaveBeenCalledWith("/term10/processes", {
-      offset: 1,
-      limit: 2,
+    const result = await getProcessesTool.handler({
+      term: 10,
+      offset: 0,
+      limit: 1,
+      title: "kodeks",
+      documentType: "projekt ustawy",
+      passed: true,
+      modifiedSince: "2024-01-01T00:00:00",
+      sort_by: "-number",
     });
-    expect(result.content[0].text).toContain(
-      "Fetched the list of processes for term 10:"
-    );
+
+    expect(request).toHaveBeenCalledWith("/term10/processes", {
+      offset: 0,
+      limit: 1,
+      title: "kodeks",
+      documentType: "projekt ustawy",
+      passed: true,
+      modifiedSince: "2024-01-01T00:00:00",
+      sort_by: "-number",
+    });
+    expect(textOf(result)).toContain("Fetched the list of processes for term 10:");
+    expect(textOf(result)).toContain("To fetch more, call again with offset=1.");
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getProcessesTool.handler({ term: 10 });
-
-    expect(result.content[0].text).toContain(
-      "Failed to fetch the list of processes for term 10"
-    );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
+    expectFailure(await getProcessesTool.handler({ term: 10 }), "Failed to fetch the list of processes for term 10.");
   });
 });

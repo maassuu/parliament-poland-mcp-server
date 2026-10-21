@@ -1,75 +1,77 @@
 import { z } from "zod";
 import { makeSejmRequest } from "../utils/api.js";
-import type { Committee } from "../types/api.js";
+import { dataResponse, errorResponse, listResponse } from "../utils/response.js";
+import type { Committee, CommitteeSitting } from "../types/api.js";
+import { defineTool, limitSchema, offsetSchema, segment, termSchema } from "./common.js";
 
-export const getCommitteesTool = {
+const committeeCodeSchema = z
+  .string()
+  .min(1)
+  .describe("Code of the committee (e.g. 'ASW', 'SUE'); see get-committees");
+
+export const getCommitteesTool = defineTool({
   description: "Get a list of committees for a given term",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    offset: z.number().int().positive().optional().describe("Offset for pagination"),
-    limit: z.number().int().positive().optional().describe("Limit for pagination"),
+    term: termSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
   },
-  handler: async (args: { term: number, offset?: number, limit?: number }) => {
-    const { term, offset, limit } = args;
-    const committees = await makeSejmRequest<Committee[]>(
-      `/term${term}/committees`,
-      { offset, limit },
-    );
+  handler: async ({ term, offset, limit }) => {
+    const committees = await makeSejmRequest<Committee[]>(`/term${term}/committees`);
 
     if (!committees.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of committees for term ${term}.\n\nError: ${committees.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch the list of committees for term ${term}.`, committees.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of committees for term ${term}:\n\n${JSON.stringify(committees.data, null, 2)}`,
-        },
-      ],
-    };
+    return listResponse(`Fetched the list of committees for term ${term}:`, committees.data, {
+      offset,
+      limit,
+    });
   },
-};
+});
 
-export const getCommitteeTool = {
+export const getCommitteeTool = defineTool({
   description: "Get detailed information about a specific committee",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    id: z.string().describe("ID of the committee (e.g., 'KFP', 'ESM')"),
+    term: termSchema,
+    id: committeeCodeSchema,
   },
-  handler: async (args: { term: number; id: string }) => {
-    const { term, id } = args;
-    const committee = await makeSejmRequest<Committee>(
-      `/term${term}/committees/${id}`
-    );
+  handler: async ({ term, id }) => {
+    const committee = await makeSejmRequest<Committee>(`/term${term}/committees/${segment(id)}`);
 
     if (!committee.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch details for committee ${id} in term ${term}.\n\nError: ${committee.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch details for committee ${id} in term ${term}.`, committee.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched details for committee ${id} in term ${term}:\n\n${JSON.stringify(committee.data, null, 2)}`,
-        },
-      ],
-    };
+    return dataResponse(`Fetched details for committee ${id} in term ${term}:`, committee.data);
   },
-};
+});
+
+export const getCommitteeSittingsTool = defineTool({
+  description: "Get a list of sittings of a specific committee",
+  schema: {
+    term: termSchema,
+    id: committeeCodeSchema,
+    cancelled: z.boolean().optional().describe("Also include cancelled sittings"),
+    offset: offsetSchema,
+    limit: limitSchema,
+  },
+  handler: async ({ term, id, cancelled, offset, limit }) => {
+    const sittings = await makeSejmRequest<CommitteeSitting[]>(
+      `/term${term}/committees/${segment(id)}/sittings`,
+      { cancelled },
+    );
+
+    if (!sittings.ok) {
+      return errorResponse(
+        `Failed to fetch sittings of committee ${id} in term ${term}.`,
+        sittings.error,
+      );
+    }
+
+    return listResponse(`Fetched sittings of committee ${id} in term ${term}:`, sittings.data, {
+      offset,
+      limit,
+    });
+  },
+});

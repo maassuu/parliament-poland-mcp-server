@@ -1,40 +1,31 @@
 import { z } from "zod";
 import { makeSejmRequest } from "../utils/api.js";
+import { apiPageResponse, errorResponse } from "../utils/response.js";
 import type { LegislativeProcess } from "../types/api.js";
+import { defineTool, limitSchema, offsetSchema, sortBySchema, termSchema } from "./common.js";
 
-export const getProcessesTool = {
+export const getProcessesTool = defineTool({
   description: "Get a list of legislative processes for a given term",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    offset: z.number().int().positive().optional().describe("Offset for pagination"),
-    limit: z.number().int().positive().optional().describe("Limit for pagination"),
+    term: termSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
+    title: z.string().optional().describe("Search for a phrase in the title"),
+    documentType: z.string().optional().describe("Only processes of this document type (e.g. 'projekt ustawy')"),
+    passed: z.boolean().optional().describe("Only passed acts"),
+    modifiedSince: z.string().optional().describe("Only processes modified since this date-time (e.g. '2024-09-07T14:58:28')"),
+    sort_by: sortBySchema,
   },
-  handler: async (args: { term: number, offset?: number, limit?: number }) => {
-    const { term, offset, limit } = args;
+  handler: async ({ term, offset, limit, title, documentType, passed, modifiedSince, sort_by }) => {
     const processes = await makeSejmRequest<LegislativeProcess[]>(
       `/term${term}/processes`,
-      { offset, limit },
+      { offset, limit, title, documentType, passed, modifiedSince, sort_by },
     );
 
     if (!processes.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of processes for term ${term}\n\nError: ${processes.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch the list of processes for term ${term}.`, processes.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of processes for term ${term}:\n\n${JSON.stringify(processes.data, null, 2)}`,
-        },
-      ],
-    };
+    return apiPageResponse(`Fetched the list of processes for term ${term}:`, processes.data, { offset, limit });
   },
-};
+});

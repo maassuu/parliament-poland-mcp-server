@@ -1,43 +1,22 @@
 import { z } from "zod";
 import { makeSejmRequest } from "../utils/api.js";
+import { dataResponse, errorResponse } from "../utils/response.js";
 import type { LegislativeProcess } from "../types/api.js";
+import { defineTool, termSchema } from "./common.js";
 
-export const getProcessTool = {
+export const getProcessTool = defineTool({
   description: "Get information about a specific legislative process",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    processNumber:
-      z.number().int().positive().describe("Number of the legislative process"),
+    term: termSchema,
+    processNumber: z.number().int().positive().describe("Number of the legislative process"),
   },
-  handler: async (args: { term: number; processNumber: number }) => {
-    const { term, processNumber } = args;
-    const process = await makeSejmRequest<LegislativeProcess>(
-      `/term${term}/process/${processNumber}`
-    );
+  handler: async ({ term, processNumber }) => {
+    const process = await makeSejmRequest<LegislativeProcess>(`/term${term}/processes/${processNumber}`);
 
     if (!process.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch process ${processNumber} for term ${term}.\n\nError: ${process.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch process ${processNumber} for term ${term}.`, process.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched process ${processNumber} for term ${term}:\n\n${JSON.stringify(
-            process.data,
-            null,
-            2
-          )}`,
-        },
-      ],
-    };
+    return dataResponse(`Fetched process ${processNumber} for term ${term}:`, process.data);
   },
-};
+});

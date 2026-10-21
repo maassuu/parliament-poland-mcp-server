@@ -6,7 +6,6 @@ async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("Parliament Poland MCP Server running on stdio");
-    await new Promise(() => {});
   } catch (error) {
     console.error("Fatal error in main():", error);
     process.exit(1);

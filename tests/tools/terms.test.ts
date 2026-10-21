@@ -1,46 +1,33 @@
 import { jest } from "@jest/globals";
 import { makeSejmRequest } from "../../src/utils/api.js";
+import { expectFailure, type MockFn, notFoundResult, okResult, textOf } from "../helpers.js";
 import { getTermsTool } from "../../src/tools/terms.js";
-
-type MakeSejmRequestFn = (
-  endpoint: string,
-  params?: Record<string, unknown>
-) => Promise<unknown>;
 
 jest.mock("../../src/utils/api.js", () => ({
   makeSejmRequest: jest.fn(),
 }));
 
-const makeSejmRequestMock =
-  makeSejmRequest as jest.MockedFunction<MakeSejmRequestFn>;
+const request = makeSejmRequest as jest.MockedFunction<MockFn>;
 
 beforeEach(() => {
-  makeSejmRequestMock.mockReset();
+  request.mockReset();
 });
 
 describe("getTermsTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: [{ term: 10 }] });
+  it("fetches all terms and pages them locally", async () => {
+    request.mockResolvedValue(okResult([{ num: 10 }, { num: 9 }, { num: 8 }]));
 
-    const result = await getTermsTool.handler({ offset: 1, limit: 2 });
+    const result = await getTermsTool.handler({ offset: 1, limit: 1 });
 
-    expect(makeSejmRequestMock).toHaveBeenCalledWith("/term", {
-      offset: 1,
-      limit: 2,
-    });
-    expect(result.content[0].text).toContain("Fetched the list of Sejm terms:");
+    expect(request).toHaveBeenCalledWith("/term");
+    expect(textOf(result)).toContain("Fetched the list of Sejm terms:");
+    expect(textOf(result)).toContain("Showing items 2-2 of 3. To fetch more, call again with offset=2.");
+    expect(textOf(result)).toContain('[{"num":9}]');
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getTermsTool.handler({});
-
-    expect(result.content[0].text).toContain("Failed to fetch the list of terms.");
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
+    expectFailure(await getTermsTool.handler({}), "Failed to fetch the list of terms.");
   });
 });

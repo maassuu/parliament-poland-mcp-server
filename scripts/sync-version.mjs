@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const version = pkg.version;
@@ -16,6 +16,6 @@ serverJson.version = version;
 for (const p of serverJson.packages ?? []) {
   p.version = version;
 }
-writeFileSync("server.json", JSON.stringify(serverJson, null, 2) + "\n");
+writeFileSync("server.json", `${JSON.stringify(serverJson, null, 2)}\n`);
 
 console.log(`Synced version ${version} to server.ts and server.json`);

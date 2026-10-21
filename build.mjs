@@ -1,6 +1,5 @@
-
+import { chmodSync } from 'node:fs';
 import esbuild from 'esbuild';
-import { exec } from 'child_process';
 
 const isWatch = process.argv.includes('--watch');
 
@@ -8,25 +7,14 @@ const buildOptions = {
   entryPoints: ['src/index.ts'],
   bundle: true,
   platform: 'node',
-  target: 'node16',
+  target: 'node18',
   outfile: 'build/index.mjs',
   format: 'esm',
-  external: ['@modelcontextprotocol/sdk'],
+  external: ['@modelcontextprotocol/sdk', 'zod'],
   banner: {
     js: '#!/usr/bin/env node',
   },
 };
-
-function postBuild() {
-  exec('chmod +x build/index.mjs', (err, stdout, stderr) => {
-    if (err) {
-      console.error(`chmod error: ${err}`);
-      return;
-    }
-    if (stdout) process.stdout.write(stdout);
-    if (stderr) process.stderr.write(stderr);
-  });
-}
 
 async function build() {
   try {
@@ -35,8 +23,8 @@ async function build() {
       await context.watch();
       console.log('Watching for changes...');
     } else {
-      const result = await esbuild.build(buildOptions);
-      postBuild();
+      await esbuild.build(buildOptions);
+      chmodSync(buildOptions.outfile, 0o755);
       console.log('Build finished.');
     }
   } catch (error) {

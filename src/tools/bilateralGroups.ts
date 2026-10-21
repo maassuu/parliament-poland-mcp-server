@@ -1,36 +1,22 @@
-import { z } from "zod";
 import { makeSejmRequest } from "../utils/api.js";
+import { errorResponse, listResponse } from "../utils/response.js";
 import type { BilateralGroup } from "../types/api.js";
+import { defineTool, limitSchema, offsetSchema, termSchema } from "./common.js";
 
-export const getBilateralGroupsTool = {
+export const getBilateralGroupsTool = defineTool({
   description: "Get a list of bilateral groups in the Sejm",
-  schema: {},
-  handler: async () => {
-    const groups = await makeSejmRequest<BilateralGroup[]>("/bilateralGroups");
+  schema: {
+    term: termSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
+  },
+  handler: async ({ term, offset, limit }) => {
+    const groups = await makeSejmRequest<BilateralGroup[]>(`/term${term}/bilateralGroups`);
 
     if (!groups.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of bilateral groups.\n\nError: ${groups.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch the list of bilateral groups for term ${term}.`, groups.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of bilateral groups:\n\n${JSON.stringify(
-            groups.data,
-            null,
-            2
-          )}`,
-        },
-      ],
-    };
+    return listResponse(`Fetched the list of bilateral groups for term ${term}:`, groups.data, { offset, limit });
   },
-};
+});

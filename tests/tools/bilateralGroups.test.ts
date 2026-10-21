@@ -1,47 +1,35 @@
 import { jest } from "@jest/globals";
 import { makeSejmRequest } from "../../src/utils/api.js";
+import { expectFailure, type MockFn, notFoundResult, okResult, textOf } from "../helpers.js";
 import { getBilateralGroupsTool } from "../../src/tools/bilateralGroups.js";
-
-type MakeSejmRequestFn = (
-  endpoint: string,
-  params?: Record<string, unknown>
-) => Promise<unknown>;
 
 jest.mock("../../src/utils/api.js", () => ({
   makeSejmRequest: jest.fn(),
 }));
 
-const makeSejmRequestMock =
-  makeSejmRequest as jest.MockedFunction<MakeSejmRequestFn>;
+const request = makeSejmRequest as jest.MockedFunction<MockFn>;
 
 beforeEach(() => {
-  makeSejmRequestMock.mockReset();
+  request.mockReset();
 });
 
 describe("getBilateralGroupsTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: [{ id: 1 }] });
+  it("fetches the groups of the given term", async () => {
+    request.mockResolvedValue(okResult([{ id: 532 }]));
 
-    const result = await getBilateralGroupsTool.handler();
+    const result = await getBilateralGroupsTool.handler({ term: 10 });
 
-    expect(makeSejmRequestMock).toHaveBeenCalledWith("/bilateralGroups");
-    expect(result.content[0].text).toContain(
-      "Fetched the list of bilateral groups:"
-    );
+    expect(request).toHaveBeenCalledWith("/term10/bilateralGroups");
+    expect(textOf(result)).toContain("Fetched the list of bilateral groups for term 10:");
+    expect(textOf(result)).toContain('[{"id":532}]');
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getBilateralGroupsTool.handler();
-
-    expect(result.content[0].text).toContain(
-      "Failed to fetch the list of bilateral groups."
+    expectFailure(
+      await getBilateralGroupsTool.handler({ term: 10 }),
+      "Failed to fetch the list of bilateral groups for term 10."
     );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
   });
 });
