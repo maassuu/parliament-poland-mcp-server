@@ -1,76 +1,43 @@
 import { z } from "zod";
 import { makeSejmRequest } from "../utils/api.js";
+import { dataResponse, errorResponse, listResponse } from "../utils/response.js";
 import type { Print } from "../types/api.js";
+import { defineTool, limitSchema, offsetSchema, segment, sortBySchema, termSchema } from "./common.js";
 
-export const getPrintsTool = {
+export const getPrintsTool = defineTool({
   description: "Get a list of prints for a given term",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    offset: z.number().int().positive().optional().describe("Offset for pagination"),
-    limit: z.number().int().positive().optional().describe("Limit for pagination"),
-    sort_by: z.string().optional().describe("Sort by a specific field."),
+    term: termSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
+    sort_by: sortBySchema,
   },
-  handler: async (args: { term: number, offset?: number, limit?: number, sort_by?: string }) => {
-    const { term, offset, limit, sort_by } = args;
-    const prints = await makeSejmRequest<Print[]>(
-      `/term${term}/prints`,
-      { offset, limit, sort_by },
-    );
+  handler: async ({ term, offset, limit, sort_by }) => {
+    const prints = await makeSejmRequest<Print[]>(`/term${term}/prints`, { sort_by });
 
     if (!prints.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of prints for term ${term}.\n\nError: ${prints.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch the list of prints for term ${term}.`, prints.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of prints for term ${term}:\n\n${JSON.stringify(prints.data, null, 2)}`,
-        },
-      ],
-    };
+    return listResponse(`Fetched the list of prints for term ${term}:`, prints.data, { offset, limit });
   },
-};
+});
 
-export const getPrintTool = {
+export const getPrintTool = defineTool({
   description: "Get detailed information about a specific print",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    printNumber: z.number().int().positive().describe("Number of the print"),
+    term: termSchema,
+    printNumber: z
+      .union([z.number().int().positive(), z.string().regex(/^\d+(-[A-Z]+)?$/)])
+      .describe("Number of the print, e.g. 128 or '128-A'"),
   },
-  handler: async (args: { term: number; printNumber: number }) => {
-    const { term, printNumber } = args;
-    const print = await makeSejmRequest<Print>(
-      `/term${term}/prints/${printNumber}`
-    );
+  handler: async ({ term, printNumber }) => {
+    const print = await makeSejmRequest<Print>(`/term${term}/prints/${segment(printNumber)}`);
 
     if (!print.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch details for print ${printNumber} in term ${term}.\n\nError: ${print.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch details for print ${printNumber} in term ${term}.`, print.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched details for print ${printNumber} in term ${term}:\n\n${JSON.stringify(print.data, null, 2)}`,
-        },
-      ],
-    };
+    return dataResponse(`Fetched details for print ${printNumber} in term ${term}:`, print.data);
   },
-};
+});

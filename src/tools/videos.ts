@@ -1,40 +1,34 @@
 import { z } from "zod";
 import { makeSejmRequest } from "../utils/api.js";
+import { apiPageResponse, errorResponse } from "../utils/response.js";
 import type { Video } from "../types/api.js";
+import { dateSchema, defineTool, limitSchema, offsetSchema, termSchema } from "./common.js";
 
-export const getVideosTool = {
+export const getVideosTool = defineTool({
   description: "Get a list of video recordings for a given term",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    offset: z.number().int().positive().optional().describe("Offset for pagination"),
-    limit: z.number().int().positive().optional().describe("Limit for pagination"),
+    term: termSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
+    title: z.string().optional().describe("Search for a phrase in the title"),
+    type: z.string().optional().describe("Only videos of this type (e.g. 'komisja', 'posiedzenie')"),
+    comm: z.string().optional().describe("Only videos of the committee with this code (e.g. 'SUE')"),
+    since: dateSchema.optional().describe("Only videos starting on or after this date (YYYY-MM-DD)"),
+    till: dateSchema.optional().describe("Only videos starting before this date (YYYY-MM-DD)"),
   },
-  handler: async (args: { term: number, offset?: number, limit?: number }) => {
-    const { term, offset, limit } = args;
+  handler: async ({ term, offset, limit, title, type, comm, since, till }) => {
     const videos = await makeSejmRequest<Video[]>(
       `/term${term}/videos`,
-      { offset, limit },
+      { offset, limit, title, type, comm, since, till },
     );
 
     if (!videos.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of video recordings for term ${term}.\n\nError: ${videos.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch the list of video recordings for term ${term}.`, videos.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of video recordings for term ${term}:\n\n${JSON.stringify(videos.data, null, 2)}`,
-        },
-      ],
-    };
+    return apiPageResponse(`Fetched the list of video recordings for term ${term}:`, videos.data, {
+      offset,
+      limit,
+    });
   },
-};
+});

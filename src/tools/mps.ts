@@ -1,75 +1,91 @@
 import { z } from "zod";
-import { makeSejmRequest } from "../utils/api.js";
-import type { Mp } from "../types/api.js";
+import { makeSejmImageRequest, makeSejmRequest } from "../utils/api.js";
+import { dataResponse, errorResponse, imageResponse, listResponse } from "../utils/response.js";
+import type { Mp, MpVoting } from "../types/api.js";
+import { dateSchema, defineTool, limitSchema, offsetSchema, termSchema } from "./common.js";
 
+const mpIdSchema = z.number().int().positive().describe("ID of the MP");
 
-export const getMpTool = {
+export const getMpTool = defineTool({
   description: "Get information about a member of Parliament",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    id: z.number().int().positive().describe("ID of the MP"),
+    term: termSchema,
+    id: mpIdSchema,
   },
-  handler: async (args: { term: number; id: number }) => {
-    const { term, id } = args;
+  handler: async ({ term, id }) => {
     const mp = await makeSejmRequest<Mp>(`/term${term}/MP/${id}`);
 
     if (!mp.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch information about the MP with ID ${id} in term ${term}.\n\nError: ${mp.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(
+        `Failed to fetch information about the MP with ID ${id} in term ${term}.`,
+        mp.error,
+      );
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched information about the MP with ID ${id} in term ${term}:\n\n${JSON.stringify(mp.data, null, 2)}`,
-        },
-      ],
-    };
+    return dataResponse(`Fetched information about the MP with ID ${id} in term ${term}:`, mp.data);
   },
-};
+});
 
-export const getMpsTool = {
-
+export const getMpsTool = defineTool({
   description: "Get a list of MPs for a given term",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    offset: z.number().int().positive().optional().describe("Offset for pagination"),
-    limit: z.number().int().positive().optional().describe("Limit for pagination"),
+    term: termSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
   },
-  handler: async (args: { term: number, offset?: number, limit?: number }) => {
-    const { term, offset, limit } = args;
-    const mps = await makeSejmRequest<Mp[]>(
-      `/term${term}/MP`,
-      { offset, limit },
-    );
+  handler: async ({ term, offset, limit }) => {
+    const mps = await makeSejmRequest<Mp[]>(`/term${term}/MP`);
 
     if (!mps.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of MPs for term ${term}\n\nError: ${mps.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch the list of MPs for term ${term}.`, mps.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of MPs for term ${term}:\n\n${JSON.stringify(mps.data, null, 2)}`,
-        },
-      ],
-    };
+    return listResponse(`Fetched the list of MPs for term ${term}:`, mps.data, { offset, limit });
   },
-};
+});
+
+export const getMpPhotoTool = defineTool({
+  description: "Get the official photo of a member of Parliament",
+  schema: {
+    term: termSchema,
+    id: mpIdSchema,
+    mini: z.boolean().optional().describe("Return a small thumbnail instead of the full photo"),
+  },
+  handler: async ({ term, id, mini }) => {
+    const photo = await makeSejmImageRequest(`/term${term}/MP/${id}/${mini ? "photo-mini" : "photo"}`);
+
+    if (!photo.ok) {
+      return errorResponse(`Failed to fetch the photo of the MP with ID ${id} in term ${term}.`, photo.error);
+    }
+
+    return imageResponse(`Photo of the MP with ID ${id} in term ${term}:`, photo.data);
+  },
+});
+
+export const getMpVotingsTool = defineTool({
+  description: "Get how a member of Parliament voted in all votings on a given sitting day",
+  schema: {
+    term: termSchema,
+    id: mpIdSchema,
+    sitting: z.number().int().positive().describe("Sejm sitting number"),
+    date: dateSchema.describe("Sitting day in YYYY-MM-DD format"),
+    offset: offsetSchema,
+    limit: limitSchema,
+  },
+  handler: async ({ term, id, sitting, date, offset, limit }) => {
+    const votings = await makeSejmRequest<MpVoting[]>(`/term${term}/MP/${id}/votings/${sitting}/${date}`);
+
+    if (!votings.ok) {
+      return errorResponse(
+        `Failed to fetch votes of the MP with ID ${id} on sitting ${sitting} (${date}) in term ${term}.`,
+        votings.error,
+      );
+    }
+
+    return listResponse(
+      `Fetched votes of the MP with ID ${id} on sitting ${sitting} (${date}) in term ${term}:`,
+      votings.data,
+      { offset, limit },
+    );
+  },
+});

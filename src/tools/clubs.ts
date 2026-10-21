@@ -1,75 +1,40 @@
 import { z } from "zod";
 import { makeSejmRequest } from "../utils/api.js";
+import { dataResponse, errorResponse, listResponse } from "../utils/response.js";
 import type { Club } from "../types/api.js";
+import { defineTool, limitSchema, offsetSchema, segment, termSchema } from "./common.js";
 
-export const getClubsTool = {
+export const getClubsTool = defineTool({
   description: "Get a list of clubs for a given term",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    offset: z.number().int().positive().optional().describe("Offset for pagination"),
-    limit: z.number().int().positive().optional().describe("Limit for pagination"),
+    term: termSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
   },
-  handler: async (args: { term: number, offset?: number, limit?: number }) => {
-    const { term, offset, limit } = args;
-    const clubs = await makeSejmRequest<Club[]>(
-      `/term${term}/clubs`,
-      { offset, limit },
-    );
+  handler: async ({ term, offset, limit }) => {
+    const clubs = await makeSejmRequest<Club[]>(`/term${term}/clubs`);
 
     if (!clubs.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of clubs for term ${term}.\n\nError: ${clubs.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch the list of clubs for term ${term}.`, clubs.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of clubs for term ${term}:\n\n${JSON.stringify(clubs.data, null, 2)}`,
-        },
-      ],
-    };
+    return listResponse(`Fetched the list of clubs for term ${term}:`, clubs.data, { offset, limit });
   },
-};
+});
 
-export const getClubTool = {
+export const getClubTool = defineTool({
   description: "Get detailed information about a specific club",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    id: z.string().describe("ID of the club (e.g., 'KO', 'PIS')"),
+    term: termSchema,
+    id: z.string().min(1).describe("ID of the club, case-sensitive (e.g. 'KO', 'PiS'); see get-clubs"),
   },
-  handler: async (args: { term: number; id: string }) => {
-    const { term, id } = args;
-    const club = await makeSejmRequest<Club>(
-      `/term${term}/clubs/${id}`
-    );
+  handler: async ({ term, id }) => {
+    const club = await makeSejmRequest<Club>(`/term${term}/clubs/${segment(id)}`);
 
     if (!club.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch details for club ${id} in term ${term}.\n\nError: ${club.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch details for club ${id} in term ${term}.`, club.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched details for club ${id} in term ${term}:\n\n${JSON.stringify(club.data, null, 2)}`,
-        },
-      ],
-    };
+    return dataResponse(`Fetched details for club ${id} in term ${term}:`, club.data);
   },
-};
+});

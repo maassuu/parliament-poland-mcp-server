@@ -1,40 +1,44 @@
 import { z } from "zod";
 import { makeSejmRequest } from "../utils/api.js";
+import { htmlToText } from "../utils/html.js";
+import { dataResponse, errorResponse, listResponse } from "../utils/response.js";
 import type { Proceeding } from "../types/api.js";
+import { defineTool, limitSchema, offsetSchema, termSchema } from "./common.js";
 
-export const getProceedingsTool = {
-  description: "Get a list of proceedings for a given term",
+export const getProceedingsTool = defineTool({
+  description: "Get a list of proceedings (sittings) for a given term, without agendas",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    offset: z.number().int().positive().optional().describe("Offset for pagination"),
-    limit: z.number().int().positive().optional().describe("Limit for pagination"),
+    term: termSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
   },
-  handler: async (args: { term: number, offset?: number, limit?: number }) => {
-    const { term, offset, limit } = args;
-    const proceedings = await makeSejmRequest<Proceeding[]>(
-      `/term${term}/proceedings`,
-      { offset, limit },
-    );
+  handler: async ({ term, offset, limit }) => {
+    const proceedings = await makeSejmRequest<Proceeding[]>(`/term${term}/proceedings`);
 
     if (!proceedings.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of proceedings for term ${term}.\n\nError: ${proceedings.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResponse(`Failed to fetch the list of proceedings for term ${term}.`, proceedings.error);
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of proceedings for term ${term}:\n\n${JSON.stringify(proceedings.data, null, 2)}`,
-        },
-      ],
-    };
+    // Agendas are long HTML documents; get-proceeding returns one as plain text.
+    const summaries = proceedings.data.map(({ agenda: _agenda, ...rest }) => rest);
+    return listResponse(`Fetched the list of proceedings for term ${term}:`, summaries, { offset, limit });
   },
-};
+});
+
+export const getProceedingTool = defineTool({
+  description: "Get details of a specific proceeding (sitting), including its agenda as plain text",
+  schema: {
+    term: termSchema,
+    proceeding: z.number().int().positive().describe("Sejm sitting number"),
+  },
+  handler: async ({ term, proceeding }) => {
+    const result = await makeSejmRequest<Proceeding>(`/term${term}/proceedings/${proceeding}`);
+
+    if (!result.ok) {
+      return errorResponse(`Failed to fetch proceeding ${proceeding} for term ${term}.`, result.error);
+    }
+
+    const data = result.data.agenda ? { ...result.data, agenda: htmlToText(result.data.agenda) } : result.data;
+    return dataResponse(`Fetched proceeding ${proceeding} for term ${term}:`, data);
+  },
+});

@@ -1,50 +1,52 @@
 import { jest } from "@jest/globals";
 import { makeSejmRequest } from "../../src/utils/api.js";
+import { expectFailure, type MockFn, notFoundResult, okResult, textOf } from "../helpers.js";
 import { getVideosTool } from "../../src/tools/videos.js";
-
-type MakeSejmRequestFn = (
-  endpoint: string,
-  params?: Record<string, unknown>
-) => Promise<unknown>;
 
 jest.mock("../../src/utils/api.js", () => ({
   makeSejmRequest: jest.fn(),
 }));
 
-const makeSejmRequestMock =
-  makeSejmRequest as jest.MockedFunction<MakeSejmRequestFn>;
+const request = makeSejmRequest as jest.MockedFunction<MockFn>;
 
 beforeEach(() => {
-  makeSejmRequestMock.mockReset();
+  request.mockReset();
 });
 
 describe("getVideosTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: [{ id: 1 }] });
+  it("passes filters and paging to the API", async () => {
+    request.mockResolvedValue(okResult([{ unid: "a" }, { unid: "b" }]));
 
-    const result = await getVideosTool.handler({ term: 10, offset: 1, limit: 2 });
-
-    expect(makeSejmRequestMock).toHaveBeenCalledWith("/term10/videos", {
-      offset: 1,
+    const result = await getVideosTool.handler({
+      term: 10,
+      offset: 2,
       limit: 2,
+      title: "budżet",
+      type: "komisja",
+      comm: "SUE",
+      since: "2024-01-01",
+      till: "2024-02-01",
     });
-    expect(result.content[0].text).toContain(
-      "Fetched the list of video recordings for term 10:"
-    );
+
+    expect(request).toHaveBeenCalledWith("/term10/videos", {
+      offset: 2,
+      limit: 2,
+      title: "budżet",
+      type: "komisja",
+      comm: "SUE",
+      since: "2024-01-01",
+      till: "2024-02-01",
+    });
+    expect(textOf(result)).toContain("Fetched the list of video recordings for term 10:");
+    expect(textOf(result)).toContain("To fetch more, call again with offset=4.");
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getVideosTool.handler({ term: 10 });
-
-    expect(result.content[0].text).toContain(
+    expectFailure(
+      await getVideosTool.handler({ term: 10 }),
       "Failed to fetch the list of video recordings for term 10."
     );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
   });
 });

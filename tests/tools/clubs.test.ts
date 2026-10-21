@@ -1,78 +1,61 @@
 import { jest } from "@jest/globals";
 import { makeSejmRequest } from "../../src/utils/api.js";
+import { expectFailure, type MockFn, notFoundResult, okResult, textOf } from "../helpers.js";
 import { getClubTool, getClubsTool } from "../../src/tools/clubs.js";
-
-type MakeSejmRequestFn = (
-  endpoint: string,
-  params?: Record<string, unknown>
-) => Promise<unknown>;
 
 jest.mock("../../src/utils/api.js", () => ({
   makeSejmRequest: jest.fn(),
 }));
 
-const makeSejmRequestMock =
-  makeSejmRequest as jest.MockedFunction<MakeSejmRequestFn>;
+const request = makeSejmRequest as jest.MockedFunction<MockFn>;
 
 beforeEach(() => {
-  makeSejmRequestMock.mockReset();
+  request.mockReset();
 });
 
 describe("getClubsTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: [{ id: "KO" }] });
+  it("pages the club list locally", async () => {
+    request.mockResolvedValue(okResult([{ id: "KO" }, { id: "PiS" }]));
 
     const result = await getClubsTool.handler({ term: 10, offset: 1, limit: 2 });
 
-    expect(makeSejmRequestMock).toHaveBeenCalledWith("/term10/clubs", {
-      offset: 1,
-      limit: 2,
-    });
-    expect(result.content[0].text).toContain(
-      "Fetched the list of clubs for term 10:"
-    );
+    expect(request).toHaveBeenCalledWith("/term10/clubs");
+    expect(textOf(result)).toContain("Fetched the list of clubs for term 10:");
+    expect(textOf(result)).toContain("Showing items 2-2 of 2.");
+    expect(textOf(result)).toContain('[{"id":"PiS"}]');
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getClubsTool.handler({ term: 10 });
-
-    expect(result.content[0].text).toContain(
-      "Failed to fetch the list of clubs for term 10."
-    );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
+    expectFailure(await getClubsTool.handler({ term: 10 }), "Failed to fetch the list of clubs for term 10.");
   });
 });
 
 describe("getClubTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: { id: "KO" } });
+  it("returns the club details", async () => {
+    request.mockResolvedValue(okResult({ id: "PiS" }));
 
-    const result = await getClubTool.handler({ term: 10, id: "KO" });
+    const result = await getClubTool.handler({ term: 10, id: "PiS" });
 
-    expect(makeSejmRequestMock).toHaveBeenCalledWith("/term10/clubs/KO");
-    expect(result.content[0].text).toContain(
-      "Fetched details for club KO in term 10:"
-    );
+    expect(request).toHaveBeenCalledWith("/term10/clubs/PiS");
+    expect(textOf(result)).toContain("Fetched details for club PiS in term 10:");
+  });
+
+  it("encodes the club ID in the path", async () => {
+    request.mockResolvedValue(okResult({}));
+
+    await getClubTool.handler({ term: 10, id: "../MP" });
+
+    expect(request).toHaveBeenCalledWith("/term10/clubs/..%2FMP");
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getClubTool.handler({ term: 10, id: "KO" });
-
-    expect(result.content[0].text).toContain(
+    expectFailure(
+      await getClubTool.handler({ term: 10, id: "KO" }),
       "Failed to fetch details for club KO in term 10."
     );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
   });
 });

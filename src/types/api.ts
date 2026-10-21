@@ -187,11 +187,22 @@ export interface Video {
   otherVideoLinks?: string[];
 }
 
-export interface Transcript {
-  unid?: string;
-  title?: string;
-  date?: string;
-  [key: string]: unknown;
+export interface TranscriptStatement {
+  num: number;
+  memberID: number;
+  name: string;
+  function: string;
+  rapporteur: boolean;
+  secretary: boolean;
+  unspoken: boolean;
+  startDateTime: string;
+  endDateTime: string;
+}
+
+export interface TranscriptDay {
+  proceedingNum: number;
+  date: string;
+  statements?: TranscriptStatement[];
 }
 
 export interface WrittenQuestion {
@@ -208,8 +219,48 @@ export interface WrittenQuestion {
 }
 
 export interface BilateralGroup {
-  id?: string;
-  name?: string;
-  members?: unknown[];
-  [key: string]: unknown;
+  id: number;
+  name: string;
+  engName: string;
+  appointmentDate: string;
+  remarks?: string;
+}
+
+export interface MpVoting {
+  votingNumber: number;
+  date: string;
+  title: string;
+  topic?: string;
+  description?: string;
+  kind: string;
+  vote: string;
+  listVotes?: Record<string, string>;
+}
+
+export interface MpVote {
+  MP: number;
+  club: string;
+  firstName: string;
+  secondName?: string;
+  lastName: string;
+  vote: string;
+  listVotes?: Record<string, string>;
+}
+
+export interface VotingDetails extends Voting {
+  votes?: MpVote[];
+}
+
+export interface CommitteeSitting {
+  num: number;
+  code: string;
+  date: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  room?: string;
+  agenda?: string;
+  status?: string;
+  closed: boolean;
+  remote: boolean;
+  video?: unknown[];
 }

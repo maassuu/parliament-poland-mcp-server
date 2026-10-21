@@ -1,40 +1,65 @@
 import { z } from "zod";
-import { makeSejmRequest } from "../utils/api.js";
-import type { Transcript } from "../types/api.js";
+import { makeSejmRequest, makeSejmTextRequest } from "../utils/api.js";
+import { htmlToText } from "../utils/html.js";
+import { errorResponse, listResponse, plainTextResponse } from "../utils/response.js";
+import type { TranscriptDay } from "../types/api.js";
+import { dateSchema, defineTool, limitSchema, offsetSchema, termSchema } from "./common.js";
 
-export const getTranscriptsTool = {
-  description: "Get a list of transcripts for a given term",
+const proceedingSchema = z.number().int().positive().describe("Sejm sitting number");
+const sittingDateSchema = dateSchema.describe("Sitting day in YYYY-MM-DD format (see get-proceedings)");
+
+export const getTranscriptsTool = defineTool({
+  description: "Get the list of statements (speakers) in the transcript of one sitting day",
   schema: {
-    term: z.number().int().positive().describe("Term of the Sejm"),
-    offset: z.number().int().positive().optional().describe("Offset for pagination"),
-    limit: z.number().int().positive().optional().describe("Limit for pagination"),
+    term: termSchema,
+    proceeding: proceedingSchema,
+    date: sittingDateSchema,
+    offset: offsetSchema,
+    limit: limitSchema,
   },
-  handler: async (args: { term: number, offset?: number, limit?: number }) => {
-    const { term, offset, limit } = args;
-    const transcripts = await makeSejmRequest<Transcript[]>(
-      `/term${term}/speeches`,
-      { offset, limit },
+  handler: async ({ term, proceeding, date, offset, limit }) => {
+    const transcript = await makeSejmRequest<TranscriptDay>(
+      `/term${term}/proceedings/${proceeding}/${date}/transcripts`,
     );
 
-    if (!transcripts.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Failed to fetch the list of transcripts for term ${term}.\n\nError: ${transcripts.error.message}`,
-          },
-        ],
-        isError: true,
-      };
+    if (!transcript.ok) {
+      return errorResponse(
+        `Failed to fetch the transcript of sitting ${proceeding} (${date}) in term ${term}.`,
+        transcript.error,
+      );
     }
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Fetched the list of transcripts for term ${term}:\n\n${JSON.stringify(transcripts.data, null, 2)}`,
-        },
-      ],
-    };
+    return listResponse(
+      `Fetched the statements of sitting ${proceeding} (${date}) in term ${term}:`,
+      transcript.data.statements ?? [],
+      { offset, limit },
+    );
   },
-};
+});
+
+export const getTranscriptStatementTool = defineTool({
+  description: "Get the full text of a single statement from a sitting transcript",
+  schema: {
+    term: termSchema,
+    proceeding: proceedingSchema,
+    date: sittingDateSchema,
+    statementNum: z.number().int().nonnegative().describe("Statement number (see get-transcripts)"),
+  },
+  handler: async ({ term, proceeding, date, statementNum }) => {
+    const statement = await makeSejmTextRequest(
+      `/term${term}/proceedings/${proceeding}/${date}/transcripts/${statementNum}`,
+    );
+
+    if (!statement.ok) {
+      return errorResponse(
+        `Failed to fetch statement ${statementNum} of sitting ${proceeding} (${date}) in term ${term}.`,
+        statement.error,
+      );
+    }
+
+    return plainTextResponse(
+      `Fetched statement ${statementNum} of sitting ${proceeding} (${date}) in term ${term}:`,
+      htmlToText(statement.data),
+    );
+  },
+});

@@ -1,103 +1,85 @@
 import { jest } from "@jest/globals";
 import { makeSejmRequest } from "../../src/utils/api.js";
-import { getInterpellationTool, getInterpellationsTool } from "../../src/tools/interpellations.js";
-
-type MakeSejmRequestFn = (
-  endpoint: string,
-  params?: Record<string, unknown>
-) => Promise<unknown>;
+import { expectFailure, type MockFn, notFoundResult, okResult, textOf } from "../helpers.js";
+import { getInterpellationsTool, getInterpellationTool } from "../../src/tools/interpellations.js";
 
 jest.mock("../../src/utils/api.js", () => ({
   makeSejmRequest: jest.fn(),
 }));
 
-const makeSejmRequestMock =
-  makeSejmRequest as jest.MockedFunction<MakeSejmRequestFn>;
+const request = makeSejmRequest as jest.MockedFunction<MockFn>;
 
 beforeEach(() => {
-  makeSejmRequestMock.mockReset();
+  request.mockReset();
 });
 
 describe("getInterpellationsTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: [{ id: 12 }] });
+  it("passes the supported filters and paging to the API", async () => {
+    request.mockResolvedValue(okResult([{ num: 1 }, { num: 2 }]));
 
     const result = await getInterpellationsTool.handler({
       term: 10,
-      offset: 1,
+      offset: 4,
       limit: 2,
-      dateFrom: "2020-01-01",
-      dateTo: "2020-02-01",
-      title: "transport",
-      number: 12,
-      mp: 45,
-      club: "KO",
-      status: "ANSWERED",
-      sort_by: "date",
+      from: 277,
+      to: "minister finansów",
+      title: "podatek",
+      since: "2024-01-01",
+      till: "2024-02-01",
+      delayed: true,
+      modifiedSince: "2024-01-01T00:00:00",
+      sort_by: "-num",
     });
 
-    expect(makeSejmRequestMock).toHaveBeenCalledWith(
-      "/term10/interpellations",
-      {
-        offset: 1,
-        limit: 2,
-        dateFrom: "2020-01-01",
-        dateTo: "2020-02-01",
-        title: "transport",
-        number: 12,
-        mp: 45,
-        club: "KO",
-        status: "ANSWERED",
-        sort_by: "date",
-      }
-    );
-    expect(result.content[0].text).toContain(
-      "Fetched the list of interpellations for term 10:"
-    );
+    expect(request).toHaveBeenCalledWith("/term10/interpellations", {
+      offset: 4,
+      limit: 2,
+      from: 277,
+      to: "minister finansów",
+      title: "podatek",
+      since: "2024-01-01",
+      till: "2024-02-01",
+      delayed: true,
+      modifiedSince: "2024-01-01T00:00:00",
+      sort_by: "-num",
+    });
+    expect(textOf(result)).toContain("Fetched the list of interpellations for term 10:");
+    expect(textOf(result)).toContain("Showing 2 items starting at offset 4. To fetch more, call again with offset=6.");
+  });
+
+  it("rejects filters the API does not support", () => {
+    const schema = getInterpellationsTool.schema;
+    expect(Object.keys(schema)).not.toEqual(expect.arrayContaining(["mp"]));
+    expect(Object.keys(schema)).not.toEqual(expect.arrayContaining(["status"]));
+    expect(schema.since.safeParse("01.01.2024").success).toBe(false);
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getInterpellationsTool.handler({ term: 10 });
-
-    expect(result.content[0].text).toContain(
+    expectFailure(
+      await getInterpellationsTool.handler({ term: 10 }),
       "Failed to fetch the list of interpellations for term 10."
     );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
   });
 });
 
 describe("getInterpellationTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: { id: 12 } });
+  it("returns the interpellation details", async () => {
+    request.mockResolvedValue(okResult({ num: 5 }));
 
-    const result = await getInterpellationTool.handler({ term: 10, id: 12 });
+    const result = await getInterpellationTool.handler({ term: 10, id: 5 });
 
-    expect(makeSejmRequestMock).toHaveBeenCalledWith(
-      "/term10/interpellations/12"
-    );
-    expect(result.content[0].text).toContain(
-      "Fetched details for interpellation 12 in term 10:"
-    );
+    expect(request).toHaveBeenCalledWith("/term10/interpellations/5");
+    expect(textOf(result)).toContain("Fetched details for interpellation 5 in term 10:");
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getInterpellationTool.handler({ term: 10, id: 12 });
-
-    expect(result.content[0].text).toContain(
-      "Failed to fetch details for interpellation 12 in term 10."
+    expectFailure(
+      await getInterpellationTool.handler({ term: 10, id: 5 }),
+      "Failed to fetch details for interpellation 5 in term 10."
     );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
   });
 });

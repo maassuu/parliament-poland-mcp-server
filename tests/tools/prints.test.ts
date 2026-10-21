@@ -1,79 +1,62 @@
 import { jest } from "@jest/globals";
 import { makeSejmRequest } from "../../src/utils/api.js";
-import { getPrintTool, getPrintsTool } from "../../src/tools/prints.js";
-
-type MakeSejmRequestFn = (
-  endpoint: string,
-  params?: Record<string, unknown>
-) => Promise<unknown>;
+import { expectFailure, type MockFn, notFoundResult, okResult, textOf } from "../helpers.js";
+import { getPrintsTool, getPrintTool } from "../../src/tools/prints.js";
 
 jest.mock("../../src/utils/api.js", () => ({
   makeSejmRequest: jest.fn(),
 }));
 
-const makeSejmRequestMock =
-  makeSejmRequest as jest.MockedFunction<MakeSejmRequestFn>;
+const request = makeSejmRequest as jest.MockedFunction<MockFn>;
 
 beforeEach(() => {
-  makeSejmRequestMock.mockReset();
+  request.mockReset();
 });
 
 describe("getPrintsTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: [{ number: 123 }] });
+  it("sorts on the API side and pages locally", async () => {
+    request.mockResolvedValue(okResult([{ number: "3" }, { number: "2" }, { number: "1" }]));
 
-    const result = await getPrintsTool.handler({ term: 10, offset: 1, limit: 2, sort_by: "date" });
+    const result = await getPrintsTool.handler({ term: 10, limit: 2, sort_by: "-number" });
 
-    expect(makeSejmRequestMock).toHaveBeenCalledWith("/term10/prints", {
-      offset: 1,
-      limit: 2,
-      sort_by: "date",
-    });
-    expect(result.content[0].text).toContain(
-      "Fetched the list of prints for term 10:"
-    );
+    expect(request).toHaveBeenCalledWith("/term10/prints", { sort_by: "-number" });
+    expect(textOf(result)).toContain("Fetched the list of prints for term 10:");
+    expect(textOf(result)).toContain("Showing items 1-2 of 3. To fetch more, call again with offset=2.");
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getPrintsTool.handler({ term: 10 });
-
-    expect(result.content[0].text).toContain(
-      "Failed to fetch the list of prints for term 10."
-    );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
+    expectFailure(await getPrintsTool.handler({ term: 10 }), "Failed to fetch the list of prints for term 10.");
   });
 });
 
 describe("getPrintTool", () => {
-  it("returns a success message with data", async () => {
-    makeSejmRequestMock.mockResolvedValue({ ok: true, data: { number: 123 } });
+  it("returns the print details", async () => {
+    request.mockResolvedValue(okResult({ number: "128" }));
 
-    const result = await getPrintTool.handler({ term: 10, printNumber: 123 });
+    const result = await getPrintTool.handler({ term: 10, printNumber: 128 });
 
-    expect(makeSejmRequestMock).toHaveBeenCalledWith("/term10/prints/123");
-    expect(result.content[0].text).toContain(
-      "Fetched details for print 123 in term 10:"
-    );
+    expect(request).toHaveBeenCalledWith("/term10/prints/128");
+    expect(textOf(result)).toContain("Fetched details for print 128 in term 10:");
+  });
+
+  it("supports print numbers with a letter suffix", async () => {
+    request.mockResolvedValue(okResult({ number: "128-A" }));
+
+    await getPrintTool.handler({ term: 10, printNumber: "128-A" });
+
+    expect(request).toHaveBeenCalledWith("/term10/prints/128-A");
+    expect(getPrintTool.schema.printNumber.safeParse("128-BA").success).toBe(true);
+    expect(getPrintTool.schema.printNumber.safeParse("../x").success).toBe(false);
   });
 
   it("returns a failure message when the API fails", async () => {
-    makeSejmRequestMock.mockResolvedValue({
-      ok: false,
-      error: { status: 404, message: "HTTP 404 Not Found for /sejm/test" },
-    });
+    request.mockResolvedValue(notFoundResult);
 
-    const result = await getPrintTool.handler({ term: 10, printNumber: 123 });
-
-    expect(result.content[0].text).toContain(
-      "Failed to fetch details for print 123 in term 10."
+    expectFailure(
+      await getPrintTool.handler({ term: 10, printNumber: 128 }),
+      "Failed to fetch details for print 128 in term 10."
     );
-    expect(result.content[0].text).toContain("Error: HTTP 404 Not Found");
-    expect(result.isError).toBe(true);
   });
 });
